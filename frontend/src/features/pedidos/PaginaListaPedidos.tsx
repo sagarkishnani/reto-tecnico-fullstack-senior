@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Alerta } from '@/components/ui/Alerta'
 import { Boton } from '@/components/ui/Boton'
 import { EstadoVacio } from '@/components/ui/EstadoVacio'
 import { DistintivoDeEstado } from '@/features/pedidos/componentes/DistintivoDeEstado'
+import { etiquetaDeEstado } from '@/features/pedidos/etiquetasDeEstado'
 import { FilasDeCarga } from '@/features/pedidos/componentes/FilasDeCarga'
 import { formatearFecha, formatearMonto } from '@/lib/formato'
 import { rutas } from '@/routes/rutas'
@@ -21,6 +22,10 @@ export function PaginaListaPedidos() {
   const error = usePedidos((estado) => estado.error)
   const cargarPedidos = usePedidos((estado) => estado.cargarPedidos)
 
+  const ubicacion = useLocation()
+  const navegar = useNavigate()
+  const mensajeDeExito = (ubicacion.state as { mensaje?: string } | null)?.mensaje ?? null
+
   const [busqueda, setBusqueda] = useState('')
   const [filtroDeEstado, setFiltroDeEstado] = useState<FiltroDeEstado>('todos')
 
@@ -31,6 +36,18 @@ export function PaginaListaPedidos() {
 
     return () => controlador.abort()
   }, [cargarPedidos])
+
+  useEffect(() => {
+    if (!mensajeDeExito) {
+      return
+    }
+
+    const temporizador = setTimeout(() => {
+      navegar(ubicacion.pathname, { replace: true, state: null })
+    }, 4000)
+
+    return () => clearTimeout(temporizador)
+  }, [mensajeDeExito, navegar, ubicacion.pathname])
 
   const visibles = useMemo(() => {
     const termino = busqueda.trim().toLowerCase()
@@ -70,6 +87,8 @@ export function PaginaListaPedidos() {
         </Link>
       </header>
 
+      {mensajeDeExito && <Alerta tono="exito">{mensajeDeExito}</Alerta>}
+
       {error && (
         <Alerta tono="error" titulo="No se pudieron cargar los pedidos">
           <p>{error}</p>
@@ -104,7 +123,7 @@ export function PaginaListaPedidos() {
             <option value="todos">Todos los estados</option>
             {estadosDePedido.map((estado) => (
               <option key={estado} value={estado}>
-                {estado}
+                {etiquetaDeEstado(estado)}
               </option>
             ))}
           </select>

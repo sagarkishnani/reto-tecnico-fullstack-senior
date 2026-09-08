@@ -1,7 +1,11 @@
 import { create } from 'zustand'
 import { ErrorDeApi } from '@/api/errorDeApi'
-import { obtenerPedidos } from '@/api/pedidos'
-import type { Pedido } from '@/types/pedido'
+import {
+  actualizarPedido as actualizarPedidoEnApi,
+  crearPedido as crearPedidoEnApi,
+  obtenerPedidos,
+} from '@/api/pedidos'
+import type { ActualizarPedidoRequest, CrearPedidoRequest, Pedido } from '@/types/pedido'
 
 type EstadoPedidos = {
   pedidos: Pedido[]
@@ -9,6 +13,8 @@ type EstadoPedidos = {
   cargados: boolean
   error: string | null
   cargarPedidos: (senal?: AbortSignal) => Promise<void>
+  crear: (datos: CrearPedidoRequest) => Promise<Pedido>
+  actualizar: (id: number, datos: ActualizarPedidoRequest) => Promise<Pedido>
   reemplazarPedido: (pedido: Pedido) => void
   quitarPedido: (id: number) => void
 }
@@ -40,6 +46,24 @@ export const usePedidos = create<EstadoPedidos>()((set) => ({
 
       set({ cargando: false, error })
     }
+  },
+
+  crear: async (datos) => {
+    const pedido = await crearPedidoEnApi(datos)
+
+    set((estado) => ({ pedidos: [pedido, ...estado.pedidos] }))
+
+    return pedido
+  },
+
+  actualizar: async (id, datos) => {
+    const pedido = await actualizarPedidoEnApi(id, datos)
+
+    set((estado) => ({
+      pedidos: estado.pedidos.map((actual) => (actual.id === pedido.id ? pedido : actual)),
+    }))
+
+    return pedido
   },
 
   reemplazarPedido: (pedido) =>
