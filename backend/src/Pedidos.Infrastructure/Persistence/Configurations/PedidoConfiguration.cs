@@ -38,7 +38,7 @@ internal sealed class PedidoConfiguration : IEntityTypeConfiguration<Pedido>
         builder.HasIndex(pedido => pedido.NumeroPedido)
             .IsUnique()
             .HasFilter("\"Eliminado\" = false")
-            .HasDatabaseName("IX_Pedidos_NumeroPedido_Activos");
+            .HasDatabaseName(PedidosDbContext.IndiceNumeroPedidoUnico);
 
         builder.HasQueryFilter(pedido => !pedido.Eliminado);
     }
