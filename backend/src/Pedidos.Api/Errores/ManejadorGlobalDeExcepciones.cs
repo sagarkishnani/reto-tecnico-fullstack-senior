@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Pedidos.Domain.Exceptions;
+using Pedidos.Infrastructure.Resiliencia;
 
 namespace Pedidos.Api.Errores;
 
@@ -24,7 +25,7 @@ internal sealed class ManejadorGlobalDeExcepciones : IExceptionHandler
     {
         var (estado, titulo, detalle) = Traducir(exception);
 
-        if (estado == StatusCodes.Status500InternalServerError)
+        if (estado >= StatusCodes.Status500InternalServerError)
         {
             _logger.LogError(exception, "Error no controlado en {Metodo} {Ruta}.",
                 httpContext.Request.Method, httpContext.Request.Path);
@@ -71,6 +72,11 @@ internal sealed class ManejadorGlobalDeExcepciones : IExceptionHandler
         DomainException => (
             StatusCodes.Status400BadRequest,
             "Regla de negocio incumplida",
+            exception.Message),
+
+        BaseDeDatosNoDisponibleException => (
+            StatusCodes.Status503ServiceUnavailable,
+            "Servicio no disponible",
             exception.Message),
 
         _ => (

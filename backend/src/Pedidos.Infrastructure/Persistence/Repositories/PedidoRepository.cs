@@ -1,27 +1,34 @@
 using Microsoft.EntityFrameworkCore;
 using Pedidos.Domain.Entities;
 using Pedidos.Domain.Repositories;
+using Pedidos.Infrastructure.Resiliencia;
 
 namespace Pedidos.Infrastructure.Persistence.Repositories;
 
 internal sealed class PedidoRepository : IPedidoRepository
 {
     private readonly PedidosDbContext _context;
+    private readonly IEjecutorDeBaseDeDatos _ejecutor;
 
-    public PedidoRepository(PedidosDbContext context)
+    public PedidoRepository(PedidosDbContext context, IEjecutorDeBaseDeDatos ejecutor)
     {
         _context = context;
+        _ejecutor = ejecutor;
     }
 
-    public async Task<IReadOnlyList<Pedido>> ObtenerTodosAsync(CancellationToken cancellationToken = default) =>
-        await _context.Pedidos
-            .AsNoTracking()
-            .OrderByDescending(pedido => pedido.Fecha)
-            .ThenByDescending(pedido => pedido.Id)
-            .ToListAsync(cancellationToken);
+    public Task<IReadOnlyList<Pedido>> ObtenerTodosAsync(CancellationToken cancellationToken = default) =>
+        _ejecutor.LeerAsync<IReadOnlyList<Pedido>>(
+            async token => await _context.Pedidos
+                .AsNoTracking()
+                .OrderByDescending(pedido => pedido.Fecha)
+                .ThenByDescending(pedido => pedido.Id)
+                .ToListAsync(token),
+            cancellationToken);
 
     public Task<Pedido?> ObtenerPorIdAsync(int id, CancellationToken cancellationToken = default) =>
-        _context.Pedidos.FirstOrDefaultAsync(pedido => pedido.Id == id, cancellationToken);
+        _ejecutor.LeerAsync(
+            token => _context.Pedidos.FirstOrDefaultAsync(pedido => pedido.Id == id, token),
+            cancellationToken);
 
     public Task<bool> ExisteNumeroPedidoAsync(
         string numeroPedido,
@@ -30,8 +37,10 @@ internal sealed class PedidoRepository : IPedidoRepository
     {
         var normalizado = numeroPedido.Trim().ToUpperInvariant();
 
-        return _context.Pedidos.AnyAsync(
-            pedido => pedido.NumeroPedido == normalizado && (idExcluido == null || pedido.Id != idExcluido),
+        return _ejecutor.LeerAsync(
+            token => _context.Pedidos.AnyAsync(
+                pedido => pedido.NumeroPedido == normalizado && (idExcluido == null || pedido.Id != idExcluido),
+                token),
             cancellationToken);
     }
 
