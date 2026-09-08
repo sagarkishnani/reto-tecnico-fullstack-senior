@@ -3,6 +3,7 @@ import { ErrorDeApi } from '@/api/errorDeApi'
 import {
   actualizarPedido as actualizarPedidoEnApi,
   crearPedido as crearPedidoEnApi,
+  eliminarPedido as eliminarPedidoEnApi,
   obtenerPedidos,
 } from '@/api/pedidos'
 import type { ActualizarPedidoRequest, CrearPedidoRequest, Pedido } from '@/types/pedido'
@@ -15,6 +16,7 @@ type EstadoPedidos = {
   cargarPedidos: (senal?: AbortSignal) => Promise<void>
   crear: (datos: CrearPedidoRequest) => Promise<Pedido>
   actualizar: (id: number, datos: ActualizarPedidoRequest) => Promise<Pedido>
+  eliminar: (id: number) => Promise<void>
   reemplazarPedido: (pedido: Pedido) => void
   quitarPedido: (id: number) => void
 }
@@ -64,6 +66,12 @@ export const usePedidos = create<EstadoPedidos>()((set) => ({
     }))
 
     return pedido
+  },
+
+  eliminar: async (id) => {
+    await eliminarPedidoEnApi(id)
+
+    set((estado) => ({ pedidos: estado.pedidos.filter((pedido) => pedido.id !== id) }))
   },
 
   reemplazarPedido: (pedido) =>

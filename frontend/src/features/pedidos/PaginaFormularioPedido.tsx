@@ -19,6 +19,7 @@ import {
 import { etiquetaDeEstado } from '@/features/pedidos/etiquetasDeEstado'
 import { aFechaDeFormulario } from '@/lib/formato'
 import { rutas } from '@/routes/rutas'
+import { notificarExito } from '@/stores/notificaciones'
 import { usePedidos } from '@/stores/pedidos'
 import { estadosDePedido, type EstadoPedido, type Pedido } from '@/types/pedido'
 
@@ -139,14 +140,13 @@ export function PaginaFormularioPedido() {
         await crear(datos)
       }
 
-      navegar(rutas.pedidos, {
-        replace: true,
-        state: {
-          mensaje: esEdicion
-            ? `Pedido ${datos.numeroPedido} actualizado.`
-            : `Pedido ${datos.numeroPedido} creado.`,
-        },
-      })
+      notificarExito(
+        esEdicion
+          ? `Pedido ${datos.numeroPedido} actualizado.`
+          : `Pedido ${datos.numeroPedido} creado.`,
+      )
+
+      navegar(rutas.pedidos, { replace: true })
     } catch (causa) {
       if (causa instanceof ErrorDeApi && causa.esConflicto) {
         setErrores({ numeroPedido: causa.message })

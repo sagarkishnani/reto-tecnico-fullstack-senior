@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { ErrorDeApi } from '@/api/errorDeApi'
 import { Alerta } from '@/components/ui/Alerta'
 import { Boton } from '@/components/ui/Boton'
+import { DialogoDeConfirmacion } from '@/components/ui/DialogoDeConfirmacion'
 import { EstadoVacio } from '@/components/ui/EstadoVacio'
 import { DistintivoDeEstado } from '@/features/pedidos/componentes/DistintivoDeEstado'
-import { etiquetaDeEstado } from '@/features/pedidos/etiquetasDeEstado'
 import { FilasDeCarga } from '@/features/pedidos/componentes/FilasDeCarga'
+import { TarjetaDePedido } from '@/features/pedidos/componentes/TarjetaDePedido'
+import { etiquetaDeEstado } from '@/features/pedidos/etiquetasDeEstado'
 import { formatearFecha, formatearMonto } from '@/lib/formato'
 import { rutas } from '@/routes/rutas'
+import { notificarError, notificarExito } from '@/stores/notificaciones'
 import { usePedidos } from '@/stores/pedidos'
-import { estadosDePedido, type EstadoPedido } from '@/types/pedido'
+import { estadosDePedido, type EstadoPedido, type Pedido } from '@/types/pedido'
 
 const columnas = ['Número', 'Cliente', 'Fecha', 'Total', 'Estado', ''] as const
 
@@ -21,13 +25,12 @@ export function PaginaListaPedidos() {
   const cargados = usePedidos((estado) => estado.cargados)
   const error = usePedidos((estado) => estado.error)
   const cargarPedidos = usePedidos((estado) => estado.cargarPedidos)
-
-  const ubicacion = useLocation()
-  const navegar = useNavigate()
-  const mensajeDeExito = (ubicacion.state as { mensaje?: string } | null)?.mensaje ?? null
+  const eliminar = usePedidos((estado) => estado.eliminar)
 
   const [busqueda, setBusqueda] = useState('')
   const [filtroDeEstado, setFiltroDeEstado] = useState<FiltroDeEstado>('todos')
+  const [pedidoAEliminar, setPedidoAEliminar] = useState<Pedido | null>(null)
+  const [eliminando, setEliminando] = useState(false)
 
   useEffect(() => {
     const controlador = new AbortController()
@@ -36,18 +39,6 @@ export function PaginaListaPedidos() {
 
     return () => controlador.abort()
   }, [cargarPedidos])
-
-  useEffect(() => {
-    if (!mensajeDeExito) {
-      return
-    }
-
-    const temporizador = setTimeout(() => {
-      navegar(ubicacion.pathname, { replace: true, state: null })
-    }, 4000)
-
-    return () => clearTimeout(temporizador)
-  }, [mensajeDeExito, navegar, ubicacion.pathname])
 
   const visibles = useMemo(() => {
     const termino = busqueda.trim().toLowerCase()
@@ -65,18 +56,40 @@ export function PaginaListaPedidos() {
   }, [pedidos, busqueda, filtroDeEstado])
 
   const hayFiltrosActivos = busqueda.trim() !== '' || filtroDeEstado !== 'todos'
-  const mostrarTabla = cargados || (cargando && !error)
+  const mostrarContenido = cargados || (cargando && !error)
 
-  const resumen = error && !cargados ? null : cargados
-    ? `${pedidos.length} ${pedidos.length === 1 ? 'pedido registrado' : 'pedidos registrados'}`
-    : 'Cargando pedidos'
+  const confirmarEliminacion = async () => {
+    if (!pedidoAEliminar) {
+      return
+    }
+
+    setEliminando(true)
+
+    try {
+      await eliminar(pedidoAEliminar.id)
+      notificarExito(`Pedido ${pedidoAEliminar.numeroPedido} eliminado.`)
+      setPedidoAEliminar(null)
+    } catch (causa) {
+      notificarError(
+        causa instanceof ErrorDeApi ? causa.message : 'No se pudo eliminar el pedido.',
+      )
+    } finally {
+      setEliminando(false)
+    }
+  }
 
   return (
     <section className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-slate-900">Pedidos</h1>
-          {resumen && <p className="mt-0.5 text-sm text-slate-600">{resumen}</p>}
+          {!(error && !cargados) && (
+            <p className="mt-0.5 text-sm text-slate-600">
+              {cargados
+                ? `${pedidos.length} ${pedidos.length === 1 ? 'pedido registrado' : 'pedidos registrados'}`
+                : 'Cargando pedidos'}
+            </p>
+          )}
         </div>
 
         <Link
@@ -86,8 +99,6 @@ export function PaginaListaPedidos() {
           Nuevo pedido
         </Link>
       </header>
-
-      {mensajeDeExito && <Alerta tono="exito">{mensajeDeExito}</Alerta>}
 
       {error && (
         <Alerta tono="error" titulo="No se pudieron cargar los pedidos">
@@ -130,94 +141,125 @@ export function PaginaListaPedidos() {
         </div>
       )}
 
-      {mostrarTabla && (
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-2xl text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-left">
-              <tr>
-                {columnas.map((columna, indice) => (
-                  <th
-                    key={columna || indice}
-                    scope="col"
-                    className={[
-                      'px-4 py-2.5 text-xs font-semibold tracking-wide text-slate-600 uppercase',
-                      columna === 'Total' ? 'text-right' : '',
-                    ].join(' ')}
-                  >
-                    {columna || <span className="sr-only">Acciones</span>}
-                  </th>
-                ))}
-              </tr>
-            </thead>
+      {mostrarContenido && (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
+          <div className="hidden overflow-x-auto sm:block">
+            <table className="w-full min-w-2xl text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left">
+                <tr>
+                  {columnas.map((columna, indice) => (
+                    <th
+                      key={columna || indice}
+                      scope="col"
+                      className={[
+                        'px-4 py-2.5 text-xs font-semibold tracking-wide text-slate-600 uppercase',
+                        columna === 'Total' ? 'text-right' : '',
+                      ].join(' ')}
+                    >
+                      {columna || <span className="sr-only">Acciones</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
 
-            <tbody className="divide-y divide-slate-100">
-              {cargando && !cargados && <FilasDeCarga columnas={columnas.length} />}
+              <tbody className="divide-y divide-slate-100">
+                {cargando && !cargados && <FilasDeCarga columnas={columnas.length} />}
 
-              {cargados &&
-                visibles.map((pedido) => (
-                  <tr key={pedido.id} className="transition-colors hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">{pedido.numeroPedido}</td>
-                    <td className="px-4 py-3 text-slate-700">{pedido.cliente}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-slate-600">
-                      {formatearFecha(pedido.fecha)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium whitespace-nowrap text-slate-900 tabular-nums">
-                      {formatearMonto(pedido.total)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <DistintivoDeEstado estado={pedido.estado} />
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <Link
-                        to={rutas.editarPedido(pedido.id)}
-                        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-marca-700 transition-colors hover:bg-marca-50"
-                      >
-                        Editar
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+                {cargados &&
+                  visibles.map((pedido) => (
+                    <tr key={pedido.id} className="transition-colors hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-900">{pedido.numeroPedido}</td>
+                      <td className="px-4 py-3 text-slate-700">{pedido.cliente}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                        {formatearFecha(pedido.fecha)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium whitespace-nowrap text-slate-900 tabular-nums">
+                        {formatearMonto(pedido.total)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <DistintivoDeEstado estado={pedido.estado} />
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <Link
+                          to={rutas.editarPedido(pedido.id)}
+                          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-marca-700 transition-colors hover:bg-marca-50"
+                        >
+                          Editar
+                        </Link>
 
-        {cargados && pedidos.length === 0 && !error && (
-          <EstadoVacio
-            titulo="Todavía no hay pedidos"
-            descripcion="Cuando registres el primer pedido aparecerá en esta lista."
-            accion={
-              <Link
-                to={rutas.nuevoPedido}
-                className="inline-flex items-center rounded-md bg-marca-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-marca-700"
-              >
-                Crear el primer pedido
-              </Link>
-            }
-          />
-        )}
+                        <Boton
+                          variante="fantasma"
+                          tamano="pequeno"
+                          className="ml-1 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => setPedidoAEliminar(pedido)}
+                        >
+                          Eliminar
+                        </Boton>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
 
-        {cargados && pedidos.length > 0 && visibles.length === 0 && (
-          <EstadoVacio
-            titulo="Ningún pedido coincide"
-            descripcion="Prueba con otro número de pedido, otro cliente u otro estado."
-            accion={
-              hayFiltrosActivos && (
-                <Boton
-                  variante="secundario"
-                  onClick={() => {
-                    setBusqueda('')
-                    setFiltroDeEstado('todos')
-                  }}
+          {cargados && visibles.length > 0 && (
+            <ul className="divide-y divide-slate-100 sm:hidden">
+              {visibles.map((pedido) => (
+                <TarjetaDePedido key={pedido.id} pedido={pedido} onEliminar={setPedidoAEliminar} />
+              ))}
+            </ul>
+          )}
+
+          {cargados && pedidos.length === 0 && !error && (
+            <EstadoVacio
+              titulo="Todavía no hay pedidos"
+              descripcion="Cuando registres el primer pedido aparecerá en esta lista."
+              accion={
+                <Link
+                  to={rutas.nuevoPedido}
+                  className="inline-flex items-center rounded-md bg-marca-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-marca-700"
                 >
-                  Limpiar filtros
-                </Boton>
-              )
-            }
-          />
-        )}
-      </div>
+                  Crear el primer pedido
+                </Link>
+              }
+            />
+          )}
+
+          {cargados && pedidos.length > 0 && visibles.length === 0 && (
+            <EstadoVacio
+              titulo="Ningún pedido coincide"
+              descripcion="Prueba con otro número de pedido, otro cliente u otro estado."
+              accion={
+                hayFiltrosActivos && (
+                  <Boton
+                    variante="secundario"
+                    onClick={() => {
+                      setBusqueda('')
+                      setFiltroDeEstado('todos')
+                    }}
+                  >
+                    Limpiar filtros
+                  </Boton>
+                )
+              }
+            />
+          )}
+        </div>
       )}
+
+      <DialogoDeConfirmacion
+        abierto={pedidoAEliminar !== null}
+        titulo="Eliminar pedido"
+        descripcion={
+          pedidoAEliminar
+            ? `El pedido ${pedidoAEliminar.numeroPedido} de ${pedidoAEliminar.cliente} dejará de aparecer en el listado. La eliminación es lógica: el registro se conserva en la base de datos.`
+            : ''
+        }
+        textoDeConfirmacion="Eliminar"
+        procesando={eliminando}
+        onConfirmar={() => void confirmarEliminacion()}
+        onCancelar={() => setPedidoAEliminar(null)}
+      />
     </section>
   )
 }

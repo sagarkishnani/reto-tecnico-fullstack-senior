@@ -4,8 +4,16 @@ import { usePedidos } from '@/stores/pedidos'
 import type { Pedido } from '@/types/pedido'
 
 const obtenerPedidosDeApi = vi.hoisted(() => vi.fn())
+const crearPedidoEnApi = vi.hoisted(() => vi.fn())
+const actualizarPedidoEnApi = vi.hoisted(() => vi.fn())
+const eliminarPedidoEnApi = vi.hoisted(() => vi.fn())
 
-vi.mock('@/api/pedidos', () => ({ obtenerPedidos: obtenerPedidosDeApi }))
+vi.mock('@/api/pedidos', () => ({
+  obtenerPedidos: obtenerPedidosDeApi,
+  crearPedido: crearPedidoEnApi,
+  actualizarPedido: actualizarPedidoEnApi,
+  eliminarPedido: eliminarPedidoEnApi,
+}))
 
 function pedido(parciales: Partial<Pedido> = {}): Pedido {
   return {
@@ -21,6 +29,9 @@ function pedido(parciales: Partial<Pedido> = {}): Pedido {
 
 beforeEach(() => {
   obtenerPedidosDeApi.mockReset()
+  crearPedidoEnApi.mockReset()
+  actualizarPedidoEnApi.mockReset()
+  eliminarPedidoEnApi.mockReset()
   usePedidos.setState({ pedidos: [], cargando: false, cargados: false, error: null })
 })
 
@@ -95,5 +106,75 @@ describe('quitarPedido', () => {
 
     expect(usePedidos.getState().pedidos).toHaveLength(1)
     expect(usePedidos.getState().pedidos[0].id).toBe(2)
+  })
+})
+
+describe('crear', () => {
+  it('coloca el pedido nuevo al inicio de la lista', async () => {
+    usePedidos.setState({ pedidos: [pedido({ id: 1 })] })
+    crearPedidoEnApi.mockResolvedValue(pedido({ id: 2, numeroPedido: 'PED-002' }))
+
+    await usePedidos.getState().crear({
+      numeroPedido: 'PED-002',
+      cliente: 'Ana Diaz',
+      fecha: '2025-01-10T00:00:00Z',
+      total: 10,
+    })
+
+    expect(usePedidos.getState().pedidos.map((p) => p.numeroPedido)).toEqual(['PED-002', 'PED-001'])
+  })
+
+  it('propaga el error sin tocar la lista', async () => {
+    usePedidos.setState({ pedidos: [pedido()] })
+    crearPedidoEnApi.mockRejectedValue(new ErrorDeApi(409, 'Conflicto', 'Ya existe.'))
+
+    await expect(
+      usePedidos.getState().crear({
+        numeroPedido: 'PED-001',
+        cliente: 'Ana Diaz',
+        fecha: '2025-01-10T00:00:00Z',
+        total: 10,
+      }),
+    ).rejects.toBeInstanceOf(ErrorDeApi)
+
+    expect(usePedidos.getState().pedidos).toHaveLength(1)
+  })
+})
+
+describe('actualizar', () => {
+  it('sustituye el pedido en la lista', async () => {
+    usePedidos.setState({ pedidos: [pedido({ id: 1 }), pedido({ id: 2 })] })
+    actualizarPedidoEnApi.mockResolvedValue(pedido({ id: 2, cliente: 'Ana Diaz', estado: 'Enviado' }))
+
+    await usePedidos.getState().actualizar(2, {
+      numeroPedido: 'PED-001',
+      cliente: 'Ana Diaz',
+      fecha: '2025-01-10T00:00:00Z',
+      total: 10,
+      estado: 'Enviado',
+    })
+
+    expect(usePedidos.getState().pedidos[1].cliente).toBe('Ana Diaz')
+    expect(usePedidos.getState().pedidos[1].estado).toBe('Enviado')
+  })
+})
+
+describe('eliminar', () => {
+  it('quita el pedido de la lista tras confirmar el borrado en el servidor', async () => {
+    usePedidos.setState({ pedidos: [pedido({ id: 1 }), pedido({ id: 2 })] })
+    eliminarPedidoEnApi.mockResolvedValue(undefined)
+
+    await usePedidos.getState().eliminar(1)
+
+    expect(usePedidos.getState().pedidos.map((p) => p.id)).toEqual([2])
+  })
+
+  it('conserva el pedido si el servidor rechaza el borrado', async () => {
+    usePedidos.setState({ pedidos: [pedido({ id: 1 })] })
+    eliminarPedidoEnApi.mockRejectedValue(new ErrorDeApi(404, 'No encontrado', 'No existe.'))
+
+    await expect(usePedidos.getState().eliminar(1)).rejects.toBeInstanceOf(ErrorDeApi)
+
+    expect(usePedidos.getState().pedidos).toHaveLength(1)
   })
 })

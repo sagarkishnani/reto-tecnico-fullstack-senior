@@ -75,7 +75,16 @@ Entity Framework ni PostgreSQL.
 │   └── schema.sql                 script idempotente del esquema
 ├── postman/
 │   └── Pedidos.postman_collection.json
-└── frontend/                      cliente React
+└── frontend/
+    ├── src/
+    │   ├── api/               cliente HTTP y funciones por recurso
+    │   ├── components/ui/     primitivos reutilizables
+    │   ├── features/          auth y pedidos
+    │   ├── lib/               JWT y formato
+    │   ├── routes/            enrutado
+    │   ├── stores/            sesión, pedidos, notificaciones
+    │   └── types/             espejo de los DTOs
+    └── README.md
 ```
 
 ---
@@ -134,7 +143,15 @@ npm install
 npm run dev
 ```
 
-Queda en `http://localhost:5173`, que es el origen autorizado en la política de CORS.
+Queda en `http://localhost:5173`, que es el origen autorizado en la política de CORS. El detalle del
+cliente está en [`frontend/README.md`](frontend/README.md).
+
+| Pantalla | Ruta |
+|---|---|
+| Inicio de sesión | `/login` |
+| Listado de pedidos | `/pedidos` |
+| Crear pedido | `/pedidos/nuevo` |
+| Editar pedido | `/pedidos/:id/editar` |
 
 ---
 
@@ -337,6 +354,17 @@ dotnet test
 | `Pedidos.Application.Tests` | 31 | Casos de uso, con dobles de prueba escritos a mano |
 | `Pedidos.Infrastructure.Tests` | 8 | Pipelines de resiliencia: retry, circuit breaker, timeout |
 
+En el cliente web:
+
+```bash
+cd frontend
+npm test
+```
+
+| Área | Tests | Cubre |
+|---|---|---|
+| `lib`, `api`, `stores`, `features` | 89 | JWT, cliente HTTP, stores y validación del formulario |
+
 Los tests de aplicación usan repositorios en memoria que replican el comportamiento real, incluido el
 filtro de eliminación lógica, en lugar de verificar llamadas a un mock.
 
@@ -404,3 +432,13 @@ dominio a su código HTTP en un único lugar.
 
 **Logging estructurado con Serilog.** En desarrollo sale legible en consola; fuera de desarrollo, en
 JSON compacto, enriquecido con `TraceId`, `UsuarioId` y `Rol` para correlacionar peticiones.
+
+**El cliente valida, pero el servidor decide.** El frontend replica las reglas del dominio para dar
+respuesta inmediata, y aun así muestra el mensaje que devuelve la API cuando esta rechaza algo. La
+unicidad del número de pedido solo se puede resolver en el servidor, y su `409` se muestra en el
+campo correspondiente.
+
+**El token JWT se guarda en `localStorage`.** Es lo habitual en una SPA con tokens Bearer y mantiene
+la sesión al recargar, pero es vulnerable a XSS. La alternativa robusta serían cookies `httpOnly` con
+tokens de refresco, que exige cambiar el contrato de la API. Queda documentado como compromiso
+consciente en el README del cliente.
