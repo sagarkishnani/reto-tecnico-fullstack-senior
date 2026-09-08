@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,49 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration)
+    {
+        services.AddPersistencia(configuration);
+        services.AddSeguridad(configuration);
+
+        return services;
+    }
+
+    public static JwtOptions LeerOpcionesJwt(IConfiguration configuration)
+    {
+        var opciones = configuration
+            .GetSection(JwtOptions.SeccionDeConfiguracion)
+            .Get<JwtOptions>();
+
+        if (opciones is null)
+        {
+            throw new InvalidOperationException(
+                $"Falta la sección de configuración '{JwtOptions.SeccionDeConfiguracion}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(opciones.Issuer) || string.IsNullOrWhiteSpace(opciones.Audience))
+        {
+            throw new InvalidOperationException(
+                $"'{JwtOptions.SeccionDeConfiguracion}:Issuer' y '{JwtOptions.SeccionDeConfiguracion}:Audience' son obligatorios.");
+        }
+
+        if (Encoding.UTF8.GetByteCount(opciones.Key) < JwtOptions.LongitudMinimaDeClaveEnBytes)
+        {
+            throw new InvalidOperationException(
+                $"'{JwtOptions.SeccionDeConfiguracion}:Key' debe tener al menos " +
+                $"{JwtOptions.LongitudMinimaDeClaveEnBytes} bytes para firmar con HMAC-SHA256. " +
+                "Defínela en la variable de entorno Jwt__Key o en los secretos de usuario.");
+        }
+
+        if (opciones.ExpiracionEnMinutos <= 0)
+        {
+            throw new InvalidOperationException(
+                $"'{JwtOptions.SeccionDeConfiguracion}:ExpiracionEnMinutos' debe ser mayor que cero.");
+        }
+
+        return opciones;
+    }
+
+    private static void AddPersistencia(this IServiceCollection services, IConfiguration configuration)
     {
         var cadenaDeConexion = configuration.GetConnectionString(NombreDeLaConexion);
 
@@ -40,9 +84,15 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(proveedor => proveedor.GetRequiredService<PedidosDbContext>());
         services.AddScoped<IPedidoRepository, PedidoRepository>();
         services.AddScoped<IUsuarioRepository, UsuarioRepository>();
-        services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<DatabaseInitializer>();
+    }
 
-        return services;
+    private static void AddSeguridad(this IServiceCollection services, IConfiguration configuration)
+    {
+        LeerOpcionesJwt(configuration);
+
+        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SeccionDeConfiguracion));
+        services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
+        services.AddSingleton<IGeneradorDeToken, GeneradorDeTokenJwt>();
     }
 }
