@@ -54,27 +54,20 @@ export function PaginaFormularioPedido() {
     esEdicion ? estado.pedidos.find((pedido) => pedido.id === idNumerico) : undefined,
   )
 
-  const [borrador, setBorrador] = useState<BorradorDePedido>(borradorInicial)
+  const idEsInvalido = esEdicion && Number.isNaN(idNumerico)
+  const hayQueConsultarLaApi = esEdicion && !idEsInvalido && pedidoEnMemoria === undefined
+
+  const [borrador, setBorrador] = useState<BorradorDePedido>(() =>
+    pedidoEnMemoria ? aBorrador(pedidoEnMemoria) : borradorInicial,
+  )
   const [errores, setErrores] = useState<ErroresDePedido>({})
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
-  const [cargando, setCargando] = useState(esEdicion)
-  const [noEncontrado, setNoEncontrado] = useState(false)
+  const [cargando, setCargando] = useState(hayQueConsultarLaApi)
+  const [noEncontrado, setNoEncontrado] = useState(idEsInvalido)
 
   useEffect(() => {
-    if (!esEdicion) {
-      return
-    }
-
-    if (Number.isNaN(idNumerico)) {
-      setNoEncontrado(true)
-      setCargando(false)
-      return
-    }
-
-    if (pedidoEnMemoria) {
-      setBorrador(aBorrador(pedidoEnMemoria))
-      setCargando(false)
+    if (!hayQueConsultarLaApi) {
       return
     }
 
@@ -102,7 +95,7 @@ export function PaginaFormularioPedido() {
       })
 
     return () => controlador.abort()
-  }, [esEdicion, idNumerico, pedidoEnMemoria])
+  }, [hayQueConsultarLaApi, idNumerico])
 
   const cambiar = <Campo extends keyof BorradorDePedido>(
     campo: Campo,
