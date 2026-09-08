@@ -10,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.UseSerilogDePedidos();
 
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddDocumentacionOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ManejadorGlobalDeExcepciones>();
 builder.Services.AddRateLimitingDePedidos(builder.Configuration);
@@ -18,6 +18,7 @@ builder.Services.AddCorsDelClienteWeb(builder.Configuration);
 builder.Services.AddAutenticacionJwt(builder.Configuration);
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHealthChecks().AddDbContextCheck<PedidosDbContext>("base-de-datos");
 
 var app = builder.Build();
 
@@ -32,7 +33,7 @@ app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseDocumentacionOpenApi();
 }
 
 app.UseCors(CorsExtensions.PoliticaDelCliente);
@@ -40,6 +41,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 try
 {
