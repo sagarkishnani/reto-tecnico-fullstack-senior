@@ -19,7 +19,6 @@ autenticación JWT, persistencia en PostgreSQL con Entity Framework Core, y clie
 - [Tests](#tests)
 - [Colección de Postman](#colección-de-postman)
 - [Configuración](#configuración)
-- [Decisiones técnicas](#decisiones-técnicas)
 
 ---
 
